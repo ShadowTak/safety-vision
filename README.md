@@ -58,22 +58,19 @@ git clone https://github.com/ShadowTak/safety-vision.git
 cd safety-vision
 ```
 
-**2. วางโมเดลที่ไม่ได้มาใน repo**
+**2. โมเดลและรูปตัวอย่างมาพร้อม repo แล้ว**
 
-ไฟล์โมเดลและรูปตัวอย่างไม่ได้อยู่ใน repo เพราะสัญญาอนุญาตของแต่ละชุดไม่เหมือนกัน ให้วางไว้ในโฟลเดอร์ `models/` ตามชื่อนี้
-
-| ไฟล์ | ได้มาจาก |
+| ไฟล์ | หมายเหตุ |
 |---|---|
-| `models/fire_rabah.pt` | Hugging Face: `rabahdev/fire-smoke-yolov8n` |
-| `models/fire_n26.pt` | Hugging Face: `weslleyskah/fire_smoke_box` (YOLO26n) |
-| `models/face_yunet.onnx` | OpenCV Zoo: `models/face_detection_yunet` (เปลี่ยนชื่อเป็น `face_yunet.onnx`) |
-| `models/fall_clf.joblib` | เทรนเองด้วย `tools/train_fall.py` (ดูหัวข้อด้านล่าง) |
-| `yolo11m-pose.pt` (ที่รากโปรเจกต์) | ดาวน์โหลดอัตโนมัติจาก Ultralytics ตอนรันครั้งแรก |
-| โมเดลอารมณ์ HSEmotion | ดาวน์โหลดอัตโนมัติผ่านแพ็กเกจ `hsemotion-onnx` ตอนรันครั้งแรก |
+| `models/fire_rabah.pt`, `models/fire_n26.pt` | โมเดลไฟ/ควัน ต้นทาง Hugging Face: `rabahdev/fire-smoke-yolov8n` และ `weslleyskah/fire_smoke_box` |
+| `models/face_yunet.onnx` | ตรวจหาใบหน้า ต้นทาง OpenCV Zoo (`face_detection_yunet`) |
+| `models/fall_clf.joblib` | ตัวจำแนกคนล้มที่เทรนเองจากข้อมูลท่าทาง (ดูวิธีเทรนด้านล่าง) |
+| `yolo11m-pose.pt` | โมเดลท่าทางคนของ Ultralytics |
+| `samples/` | รูปตัวอย่างสำหรับหน้า Demo สัญญาอนุญาตแต่ละรูปอยู่ใน `samples/SOURCES.csv` |
 
-ตัวอย่างที่ต้องการให้ระบบทำงานบนรูปของคุณเอง ไม่ต้องมีรูปใน `samples/` ก็ได้ แต่หน้า Demo จะว่างเปล่า
+โมเดลอารมณ์ HSEmotion จะดาวน์โหลดอัตโนมัติผ่านแพ็กเกจ `hsemotion-onnx` ตอนรันครั้งแรก
 
-**การเทรน `fall_clf.joblib` (ถ้าต้องการทำเอง)**
+**การเทรน `fall_clf.joblib` ใหม่ (ถ้าต้องการทำเอง)**
 
 ```sh
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt
@@ -149,4 +146,8 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 
 ## สัญญาอนุญาต
 
-โค้ดในโปรเจกต์นี้ยังไม่ได้ระบุสัญญาอนุญาต โมเดลและชุดข้อมูลที่ใช้มาจากแหล่งภายนอกแต่ละแห่ง ให้ตรวจสอบเงื่อนไขของต้นทางก่อนนำไปใช้เชิงพาณิชย์
+โค้ดในโปรเจกต์นี้ยังไม่ได้ระบุสัญญาอนุญาต โมเดลและรูปตัวอย่างมาจากแหล่งภายนอก
+
+- รูปตัวอย่างใน `samples/` มีสัญญาอนุญาตแยกกันตามรูป ดูใน `samples/SOURCES.csv` รูปที่เป็น **NC** ห้ามใช้เชิงพาณิชย์ และรูปที่เป็น **ND** ห้ามดัดแปลงเผยแพร่ซ้ำ
+- โมเดล `yolo11m-pose.pt` อยู่ภายใต้ AGPL-3.0 ของ Ultralytics
+- ก่อนนำไปใช้เชิงพาณิชย์ ให้ตรวจสอบเงื่อนไขของแต่ละต้นทางก่อน

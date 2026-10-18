@@ -7,12 +7,9 @@
 __pycache__/
 *.pyc
 
-# local-only data and tool output (not shipped)
+# local-only training data and tool output (not shipped)
 .archify/
 incoming/
 incoming2/
 samples_removed/
 testsets/
-samples/
-models/
-yolo11m-pose.pt
