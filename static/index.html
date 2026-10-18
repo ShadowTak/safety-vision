@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Safety Vision</title>
+<style>
+:root{--bg:#0e1116;--panel:#171b22;--line:#262c36;--fg:#e8ebf0;--mut:#8b94a3;--ok:#34d399;--warn:#fbbf24;--bad:#f43f5e;--fire:#ff6a1a;--acc:#6ea8ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,"Sukhumvit Set","Noto Sans Thai",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{background:none;border:1px solid transparent;color:var(--mut);padding:7px 14px;border-radius:8px;cursor:pointer;font:inherit}
+nav button.on{background:var(--panel);border-color:var(--line);color:var(--fg)}
+main{max-width:1280px;margin:0 auto;padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.stage{position:relative;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--line);aspect-ratio:4/3;display:grid;place-items:center}
+.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.stage:fullscreen{border-radius:0;aspect-ratio:auto;border:0;width:100%;height:100%}
+.fsBtn{position:absolute;right:12px;bottom:12px;z-index:4;background:rgba(23,27,34,.8);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit}
+.stage .ph{color:var(--mut);text-align:center;padding:20px}
+.banner{position:absolute;left:12px;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;z-index:3;pointer-events:none}
+.alert{padding:10px 14px;border-radius:8px;font-weight:650;background:rgba(244,63,94,.92);animation:pulse 1s infinite}
+.alert.fire{background:rgba(255,106,26,.94)}
+@keyframes pulse{50%{opacity:.65}}
+.side{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);font-weight:600}
+.meter{margin:8px 0}
+.meter .row{display:flex;justify-content:space-between;font-size:14px}
+.meter .bar{height:8px;background:#232a35;border-radius:5px;overflow:hidden;margin-top:4px}
+.meter .bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.meter.fire .bar i{background:var(--fire)}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:600}
+.pill.ok{background:rgba(52,211,153,.15);color:var(--ok)}.pill.bad{background:rgba(244,63,94,.18);color:var(--bad)}.pill.warn{background:rgba(251,191,36,.15);color:var(--warn)}
+.btn{background:var(--acc);color:#07101f;border:0;padding:9px 16px;border-radius:8px;font:inherit;font-weight:650;cursor:pointer}
+.btn.sec{background:var(--panel);color:var(--fg);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:wait}
+.controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.controls label{color:var(--mut);font-size:13px;display:flex;gap:5px;align-items:center}
+.stat{color:var(--mut);font-size:13px;margin-left:auto}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--mut);cursor:pointer;margin-top:12px}
+.drop.over{border-color:var(--acc);color:var(--fg)}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:12px;max-height:220px;overflow:auto}
+.gallery img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid transparent}
+.gallery img:hover{border-color:var(--acc)}
+.faceRow{padding:8px 0;border-top:1px solid var(--line)}.faceRow:first-of-type{border-top:0}
+.faceRow b{font-size:16px}
+.mini{display:grid;grid-template-columns:78px 1fr 38px;gap:6px;font-size:12px;color:var(--mut);align-items:center;margin-top:2px}
+.mini .bar{height:5px;background:#232a35;border-radius:3px;overflow:hidden}.mini .bar i{display:block;height:100%;background:var(--acc)}
+.scan{max-width:1280px;margin:0 auto;padding:0 20px 40px}
+.scanbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--line);color:var(--mut);padding:4px 12px;border-radius:99px;cursor:pointer;font:inherit;font-size:13px}
+.chip.on{color:var(--fg);border-color:var(--acc)}
+.prog{height:6px;background:#232a35;border-radius:4px;overflow:hidden;flex:1;min-width:120px}.prog i{display:block;height:100%;width:0;background:var(--acc)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.res{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer}
+.res.alarm{border-color:var(--bad)}
+.res canvas{width:100%;aspect-ratio:4/3;object-fit:contain;background:#000;display:block}
+.res .meta{padding:8px 10px;font-size:13px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px}
+.res .meta .nm{grid-column:1/-1;color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .meta b{font-variant-numeric:tabular-nums}
+.res .hot{color:var(--bad)}
+.summary{font-size:13px;color:var(--mut);margin-bottom:10px}
+.summary table{border-collapse:collapse;width:100%;max-width:760px}
+.summary td,.summary th{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left}
+.hide{display:none}
+.err{color:var(--bad);font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔥 Safety Vision <span style="color:var(--mut);font-weight:400">· ไฟไหม้ · คนล้ม · อารมณ์</span></h1>
+  <nav><button id="tabLive" class="on">Live กล้อง</button><button id="tabDemo">Demo อัพโหลดรูป</button></nav>
+</header>
+
+<main>
+  <section>
+    <div class="stage" id="stage">
+      <video id="vid" playsinline muted class="hide"></video>
+      <canvas id="cv"></canvas>
+      <div class="banner" id="banner"></div>
+      <button class="fsBtn" id="fsBtn" title="เต็มจอ">⛶ เต็มจอ</button>
+<div class="ph" id="ph">กด “เปิดกล้อง” เพื่อเริ่มตรวจจับแบบเรียลไทม์</div>
+    </div>
+
+    <div id="liveCtl" class="controls">
+      <button class="btn" id="startBtn">เปิดกล้อง</button>
+      <button class="btn sec hide" id="stopBtn">หยุด</button>
+      <label><input type="checkbox" id="mFire" checked> ไฟ</label>
+      <label><input type="checkbox" id="mFall" checked> คนล้ม</label>
+      <label><input type="checkbox" id="mEmo" checked> อารมณ์</label>
+      <label><input type="checkbox" id="snd" checked> เสียงเตือน</label>
+      <span class="stat" id="stat">–</span>
+    </div>
+
+    <div id="demoCtl" class="hide">
+      <div class="drop" id="drop">ลากรูปมาวาง หรือคลิกเพื่อเลือกไฟล์<input type="file" id="file" accept="image/*" class="hide"></div>
+      <div class="gallery" id="gallery"></div>
+      <div class="err" id="err"></div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="card">
+      <h3>ไฟ / ควัน</h3>
+      <div class="meter fire"><div class="row"><span>เปลวไฟ (ความมั่นใจ)</span><b id="flameConf">0%</b></div><div class="bar"><i id="flameConfBar"></i></div></div>
+      <div class="meter fire"><div class="row"><span>พื้นที่ไฟในภาพ</span><b id="flameArea">0%</b></div><div class="bar"><i id="flameAreaBar"></i></div></div>
+      <div class="meter"><div class="row"><span>ควัน (ความมั่นใจ)</span><b id="smokeConf">0%</b></div><div class="bar"><i id="smokeConfBar"></i></div></div>
+      <div class="meter"><div class="row"><span>พื้นที่ควันในภาพ</span><b id="smokeArea">0%</b></div><div class="bar"><i id="smokeAreaBar"></i></div></div>
+    </div>
+    <div class="card">
+      <h3>คน / การล้ม</h3>
+      <div id="people"><span class="pill ok">ไม่พบคน</span></div>
+    </div>
+    <div class="card">
+      <h3>สีหน้า / อารมณ์</h3>
+      <div id="faces"><span style="color:var(--mut)">ไม่พบใบหน้า</span></div>
+    </div>
+  </aside>
+</main>
+
+<section class="scan hide" id="scan">
+  <div class="scanbar">
+    <button class="btn" id="scanBtn">สแกนทุกรูป</button>
+    <div class="chips" id="chips"></div>
+    <div class="prog"><i id="progBar"></i></div>
+    <span class="stat" id="scanStat"></span>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const EMO_COLOR = {Happiness:'#34d399',Sadness:'#6ea8ff',Crying:'#38bdf8',Anger:'#f43f5e',Fear:'#a78bfa',Surprise:'#fbbf24',Disgust:'#84cc16',Neutral:'#cbd5e1',Contempt:'#fb923c'};
+const EMO_EMOJI = {Happiness:'😄',Sadness:'😢',Crying:'😭',Anger:'😠',Fear:'😨',Surprise:'😲',Disgust:'🤢',Neutral:'😐',Contempt:'😏'};
+const SKELETON = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+let mode = 'live';
+
+// ---------- drawing (shared by live + demo) ----------
+function draw(src, res, canvas = cv) {
+  const ctx = canvas.getContext('2d');
+  const w = res.w, h = res.h;
+  canvas.width = w; canvas.height = h;
+  ctx.drawImage(src, 0, 0, w, h);
+  const lw = Math.max(2, w / 320), fs = Math.max(13, w / 45);
+  ctx.lineWidth = lw; ctx.font = `600 ${fs}px -apple-system,sans-serif`; ctx.textBaseline = 'top';
+  const tag = (x, y, text, color) => {
+    const tw = ctx.measureText(text).width + 10;
+    ctx.fillStyle = color; ctx.fillRect(x, Math.max(0, y - fs - 6), tw, fs + 6);
+    ctx.fillStyle = '#000'; ctx.fillText(text, x + 5, Math.max(0, y - fs - 6) + 3);
+  };
+  for (const b of res.fire?.boxes ?? []) {
+    const c = b.label === 'flame_visible' ? '#ff6a1a' : '#9aa4b2';
+    ctx.strokeStyle = c; ctx.strokeRect(b.box[0], b.box[1], b.box[2]-b.box[0], b.box[3]-b.box[1]);
+    tag(b.box[0], b.box[1], `${b.label === 'flame_visible' ? 'ไฟ' : 'ควัน'} ${Math.round(b.conf*100)}%`, c);
+  }
+  for (const p of res.people ?? []) {
+    const c = p.fallen ? '#f43f5e' : '#34d399';
+    ctx.strokeStyle = c; ctx.strokeRect(p.box[0], p.box[1], p.box[2]-p.box[0], p.box[3]-p.box[1]);
+    tag(p.box[0], p.box[1], p.fallen ? `ล้ม! ${Math.round(p.fall_score*100)}%` : `ปกติ ${Math.round(p.fall_score*100)}%`, c);
+    ctx.strokeStyle = c; ctx.lineWidth = lw * .8;
+    for (const [a, b] of SKELETON) {
+      const A = p.keypoints[a], B = p.keypoints[b];
+      if (A[2] > .3 && B[2] > .3) { ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); }
+    }
+    ctx.lineWidth = lw;
+  }
+  for (const f of res.faces ?? []) {
+    const c = EMO_COLOR[f.emotion] || '#fff';
+    ctx.strokeStyle = c; ctx.strokeRect(f.box[0], f.box[1], f.box[2]-f.box[0], f.box[3]-f.box[1]);
+    tag(f.box[0], f.box[1], `${f.emotion_th} ${Math.round(f.conf*100)}%`, c);
+  }
+}
+
+// ---------- side panel ----------
+const pct = v => Math.round(v*100);
+function setMeter(id, v) { $(id).textContent = v + '%'; $(id+'Bar').style.width = v + '%'; }
+function updatePanel(res) {
+  const f = res.fire;
+  setMeter('flameConf', f ? pct(f.flame_conf) : 0);
+  setMeter('flameArea', f ? Math.round(f.flame_area_pct) : 0);
+  setMeter('smokeConf', f ? pct(f.smoke_conf) : 0);
+  setMeter('smokeArea', f ? Math.round(f.smoke_area_pct) : 0);
+
+  const ppl = res.people ?? [];
+  $('people').innerHTML = !ppl.length ? '<span class="pill ok">ไม่พบคน</span>' : ppl.map((p, i) =>
+    `<div class="faceRow"><b>คนที่ ${i+1}</b> <span class="pill ${p.fallen ? 'bad' : 'ok'}">${p.fallen ? 'ล้ม' : 'ปกติ'}</span>
+     <div class="mini" style="grid-template-columns:78px 1fr 38px"><span>โอกาสล้ม</span><div class="bar"><i style="width:${pct(p.fall_score)}%;background:${p.fallen?'var(--bad)':'var(--ok)'}"></i></div><span>${pct(p.fall_score)}%</span></div>
+     <div style="font-size:12px;color:var(--mut)">${p.reasons.join(' · ') || 'ท่ายืน/นั่งปกติ'}</div></div>`).join('');
+
+  const faces = res.faces ?? [];
+  $('faces').innerHTML = !faces.length ? '<span style="color:var(--mut)">ไม่พบใบหน้า</span>' : faces.map((fc, i) => {
+    const top = Object.entries(fc.probs).sort((a,b)=>b[1]-a[1]).slice(0,4);
+    return `<div class="faceRow"><b>${EMO_EMOJI[fc.emotion]||''} ${fc.emotion_th}</b> <span style="color:var(--mut)">${pct(fc.conf)}%</span>` +
+      top.map(([k,v]) => `<div class="mini"><span>${k}</span><div class="bar"><i style="width:${pct(v)}%;background:${EMO_COLOR[k]||'#6ea8ff'}"></i></div><span>${pct(v)}%</span></div>`).join('') + '</div>';
+  }).join('');
+}
+
+// ---------- alerts ----------
+let actx, lastBeep = 0, fireHits = 0, fallHits = 0;
+function beep(freq) {
+  if (!$('snd').checked) return;
+  const now = performance.now(); if (now - lastBeep < 1500) return; lastBeep = now;
+  actx ??= new AudioContext();
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.frequency.value = freq; o.type = 'square'; g.gain.value = .08;
+  o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + .25);
+}
+function alerts(res, sustained) {
+  const msgs = [];
+  const flame = !!res.fire?.fire_alarm;
+  const smoke = !!res.fire?.smoke_alarm;
+  const fall = (res.people ?? []).some(p => p.fallen);
+  // a reused fire result (server skips fire on alternate live frames) is not a new confirmation
+  if (!res.fire?.reused) fireHits = flame ? fireHits + 1 : 0;
+  fallHits = fall ? fallHits + 1 : 0;
+  const need = sustained ? 2 : 1;
+  if (fireHits >= need) { msgs.push(['fire', `🔥 ตรวจพบไฟ ${pct(res.fire.flame_conf)}%`]); beep(880); }
+  else if (smoke) msgs.push(['fire', `💨 ตรวจพบควัน ${pct(res.fire.smoke_conf)}%`]);
+  if (fallHits >= need) { msgs.push(['', '🚨 ตรวจพบคนล้ม']); beep(440); }
+  $('banner').innerHTML = msgs.map(([c, t]) => `<div class="alert ${c}">${t}</div>`).join('');
+}
+
+// ---------- live ----------
+let ws, stream, running = false, fps = 0, tPrev = 0;
+const vid = $('vid'), grab = document.createElement('canvas'), gctx = grab.getContext('2d');
+async function startLive() {
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' }, audio: false }); }
+  catch (e) { $('ph').textContent = 'เปิดกล้องไม่ได้: ' + e.message; return; }
+  vid.srcObject = stream; await vid.play();
+  $('ph').classList.add('hide'); $('startBtn').classList.add('hide'); $('stopBtn').classList.remove('hide');
+  ws = new WebSocket(`ws://${location.host}/ws/live`); ws.binaryType = 'arraybuffer';
+  running = true;
+  // two frames in flight: the next frame is encoded and sent while the server works on this one
+  ws.onopen = () => { sendFlags(); sendFrame(); sendFrame(); };
+  ws.onmessage = ev => {
+    const res = JSON.parse(ev.data);
+    draw(vid, res); updatePanel(res); alerts(res, true);
+    const t = performance.now(); fps = fps ? .8*fps + .2*(1000/(t - tPrev)) : 1; tPrev = t;
+    $('stat').textContent = `${fps.toFixed(1)} FPS · ${res.ms} ms`;
+    sendFrame();
+  };
+  ws.onclose = stopLive;
+}
+function sendFrame() {
+  if (!running || ws.readyState !== 1) return;
+  const W = 960, H = Math.round(W * vid.videoHeight / vid.videoWidth);
+  grab.width = W; grab.height = H; gctx.drawImage(vid, 0, 0, W, H);
+  grab.toBlob(b => b && ws.readyState === 1 && b.arrayBuffer().then(ab => ws.send(ab)), 'image/jpeg', .8);
+}
+function stopLive() {
+  running = false; ws?.close(); stream?.getTracks().forEach(t => t.stop());
+  $('startBtn').classList.remove('hide'); $('stopBtn').classList.add('hide');
+  $('banner').innerHTML = ''; fireHits = fallHits = 0;
+}
+$('fsBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen?.();
+$('startBtn').onclick = startLive; $('stopBtn').onclick = stopLive;
+const sendFlags = () => ws?.readyState === 1 && ws.send(JSON.stringify({ fire: $('mFire').checked, fall: $('mFall').checked, emotion: $('mEmo').checked }));
+['mFire','mFall','mEmo'].forEach(id => $(id).onchange = sendFlags);
+
+// ---------- demo ----------
+async function analyzeBlob(blob) {
+  $('err').textContent = ''; $('ph').classList.add('hide');
+  const fd = new FormData(); fd.append('file', blob, 'img');
+  try {
+    const r = await fetch('/api/analyze', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    const res = await r.json();
+    const bmp = await createImageBitmap(blob);
+    draw(bmp, res); updatePanel(res); alerts(res, false);
+  } catch (e) { $('err').textContent = 'วิเคราะห์ไม่สำเร็จ: ' + e.message; }
+}
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && analyzeBlob(e.target.files[0]);
+$('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); e.dataTransfer.files[0] && analyzeBlob(e.dataTransfer.files[0]); };
+fetch('/api/samples').then(r => r.json()).then(list => {
+  samples = list; renderChips();
+  $('gallery').innerHTML = list.map(n => `<img src="/samples/${n}" title="${n}" loading="lazy">`).join('');
+  $('gallery').onclick = async e => { if (e.target.tagName === 'IMG') analyzeBlob(await (await fetch(e.target.src)).blob()); };
+});
+
+// ---------- batch scan ----------
+let samples = [], cat = 'all';
+const catOf = n => n.replace(/_\d+\.\w+$/, '');
+const CAT_TH = {fire_flame:'ไฟ',fire_smoke:'ควัน',person_fallen:'คนล้ม',person_standing:'คนยืน',person_sitting:'คนนั่ง (ไม่ล้ม)',no_fire:'ไม่มีไฟ (หลอกตา)',face_smile:'ยิ้ม',face_sad:'เศร้า',face_crying:'ร้องไห้',face_angry:'โกรธ',face_surprised:'ตกใจ',face_neutral:'เฉยๆ'};
+// what a correct result looks like for each sample category (used for the summary table)
+const EXPECT = {
+  fire_flame: r => r.fire?.fire_alarm, fire_smoke: r => r.fire?.smoke_alarm || r.fire?.fire_alarm,
+  person_fallen: r => (r.people ?? []).some(p => p.fallen), person_standing: r => !(r.people ?? []).some(p => p.fallen),
+  person_sitting: r => !(r.people ?? []).some(p => p.fallen), no_fire: r => !r.fire?.fire_alarm && !r.fire?.smoke_alarm,
+  face_smile: r => r.faces?.[0]?.emotion === 'Happiness', face_sad: r => ['Sadness','Crying'].includes(r.faces?.[0]?.emotion),
+  face_crying: r => ['Crying','Sadness'].includes(r.faces?.[0]?.emotion), face_angry: r => r.faces?.[0]?.emotion === 'Anger',
+  face_surprised: r => r.faces?.[0]?.emotion === 'Surprise', face_neutral: r => r.faces?.[0]?.emotion === 'Neutral',
+};
+function renderChips() {
+  const cats = ['all', ...new Set(samples.map(catOf))];
+  $('chips').innerHTML = cats.map(c => `<button class="chip ${c === cat ? 'on' : ''}" data-c="${c}">${c === 'all' ? 'ทั้งหมด' : (CAT_TH[c] || c)} (${c === 'all' ? samples.length : samples.filter(n => catOf(n) === c).length})</button>`).join('');
+}
+$('chips').onclick = e => { if (e.target.dataset.c) { cat = e.target.dataset.c; renderChips(); } };
+function card(name, res, bmp) {
+  const el = document.createElement('div');
+  const fall = Math.max(0, ...(res.people ?? []).map(p => p.fall_score));
+  const face = res.faces?.[0];
+  const alarm = res.fire?.fire_alarm || res.fire?.smoke_alarm || (res.people ?? []).some(p => p.fallen);
+  el.className = 'res' + (alarm ? ' alarm' : '');
+  const c = document.createElement('canvas'); el.append(c); draw(bmp, res, c);
+  const hot = (v, on) => `<b class="${on ? 'hot' : ''}">${v}%</b>`;
+  el.insertAdjacentHTML('beforeend', `<div class="meta"><span class="nm">${name}</span>
+    <span>🔥 ไฟ ${hot(pct(res.fire.flame_conf), res.fire.fire_alarm)}</span><span>💨 ควัน ${hot(pct(res.fire.smoke_conf), res.fire.smoke_alarm)}</span>
+    <span>🚨 ล้ม ${res.people?.length ? hot(pct(fall), fall >= .5) : '<b>–</b>'}</span>
+    <span>${face ? `${EMO_EMOJI[face.emotion] || ''} ${face.emotion_th} <b>${pct(face.conf)}%</b>` : '🙂 ไม่พบหน้า'}</span></div>`);
+  el.onclick = () => { draw(bmp, res); updatePanel(res); alerts(res, false); $('ph').classList.add('hide'); window.scrollTo({top: 0, behavior: 'smooth'}); };
+  return el;
+}
+$('scanBtn').onclick = async () => {
+  const list = samples.filter(n => cat === 'all' || catOf(n) === cat);
+  $('grid').innerHTML = ''; $('summary').innerHTML = ''; $('scanBtn').disabled = true;
+  const stats = {}; const t0 = performance.now();
+  for (let i = 0; i < list.length; i++) {
+    const n = list[i];
+    try {
+      const blob = await (await fetch('/samples/' + n)).blob();
+      const fd = new FormData(); fd.append('file', blob, n);
+      const res = await (await fetch('/api/analyze', { method: 'POST', body: fd })).json();
+      $('grid').append(card(n, res, await createImageBitmap(blob)));
+      const k = catOf(n), ok = EXPECT[k]?.(res);
+      if (ok !== undefined) { stats[k] ??= [0, 0]; stats[k][0] += ok ? 1 : 0; stats[k][1]++; }
+    } catch (e) { console.warn(n, e); }
+    $('progBar').style.width = ((i + 1) / list.length * 100) + '%';
+    $('scanStat').textContent = `${i + 1}/${list.length} · ${((performance.now() - t0) / (i + 1)).toFixed(0)} ms/รูป`;
+  }
+  $('summary').innerHTML = '<table><tr><th>หมวดรูป</th><th>ระบบตอบถูก</th><th>%</th></tr>' + Object.entries(stats).map(([k, [a, b]]) =>
+    `<tr><td>${CAT_TH[k] || k}</td><td>${a}/${b}</td><td>${Math.round(a / b * 100)}%</td></tr>`).join('') + '</table>';
+  $('scanBtn').disabled = false;
+};
+
+// ---------- tabs ----------
+function setMode(m) {
+  mode = m;
+  $('tabLive').classList.toggle('on', m === 'live'); $('tabDemo').classList.toggle('on', m === 'demo');
+  $('liveCtl').classList.toggle('hide', m !== 'live'); $('demoCtl').classList.toggle('hide', m !== 'demo'); $('scan').classList.toggle('hide', m !== 'demo');
+  if (m === 'demo') { stopLive(); $('ph').classList.remove('hide'); $('ph').textContent = 'เลือกรูปตัวอย่างหรืออัพโหลดรูป'; }
+  else { $('ph').classList.remove('hide'); $('ph').textContent = 'กด “เปิดกล้อง” เพื่อเริ่มตรวจจับแบบเรียลไทม์'; }
+  ctx.clearRect(0, 0, cv.width, cv.height); $('banner').innerHTML = '';
+}
+$('tabLive').onclick = () => setMode('live'); $('tabDemo').onclick = () => setMode('demo');
+</script>
+</body>
+</html>
