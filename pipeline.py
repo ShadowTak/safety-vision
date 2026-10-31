@@ -1,6 +1,9 @@
 """Shared detection pipeline: fire/smoke, person fall, facial emotion."""
 from __future__ import annotations
 
+import os
+import platform
+import sys
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -15,13 +18,30 @@ from ultralytics import YOLO
 
 from fall_features import features
 
-MODELS = Path(__file__).parent / "models"
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+ROOT = Path(__file__).parent
+MODELS = ROOT / "models"
 FIRE_ALARM = 0.4  # ensemble score threshold (D-Fire sample: fire P=0.98 R=0.93)
 FALL_ALARM = 0.5
-FIRE_EVERY = 2  # live: fire changes slowly, so run it every 2nd frame and reuse the result
-POSE_IMGSZ = 800  # better on small/distant people than 640 (DeZan val acc 0.90 -> 0.92)
-HALF = DEVICE == "mps"  # fp16 on Apple GPU: ~35% faster pose, same accuracy (tools/evaluate.py)
+
+# Two deployment profiles. "mac": PyTorch on the Apple GPU. "pi": Raspberry Pi 5 (8GB), CPU only,
+# so every YOLO runs as NCNN (ARM-optimised, all 4 cores) and a smaller pose model is used.
+# Auto-detected; force with SV_PROFILE=mac|pi.
+PROFILE = os.environ.get("SV_PROFILE") or (
+    "pi" if sys.platform == "linux" and platform.machine() in ("aarch64", "arm64") else "mac")
+if PROFILE == "pi":
+    DEVICE, HALF = "cpu", False
+    POSE_MODEL, FALL_CLF = MODELS / "yolo11s-pose_ncnn_model", "fall_clf_pi.joblib"
+    FIRE_MODELS = [MODELS / "fire_rabah_ncnn_model", MODELS / "fire_n26_ncnn_model"]
+    POSE_IMGSZ = 640  # fixed by the NCNN export
+    FIRE_EVERY = 3  # fire changes slowly: run it every 3rd frame and reuse the result
+else:
+    DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+    HALF = DEVICE == "mps"  # fp16 on Apple GPU: ~35% faster pose, same accuracy (tools/evaluate.py)
+    POSE_MODEL, FALL_CLF = ROOT / "yolo11m-pose.pt", "fall_clf.joblib"
+    FIRE_MODELS = [MODELS / "fire_rabah.pt", MODELS / "fire_n26.pt"]
+    POSE_IMGSZ = 800  # better on small/distant people than 640 (DeZan val acc 0.90 -> 0.92)
+    FIRE_EVERY = 2
+PREDICT = {"device": DEVICE, **({"half": True} if HALF else {})}  # kwargs shared by every YOLO call
 
 # COCO keypoint indices
 L_SH, R_SH, L_HIP, R_HIP = 5, 6, 11, 12
@@ -74,9 +94,9 @@ class TrackState:
 
 class Pipeline:
     def __init__(self) -> None:
-        self.fire_models = [YOLO(str(MODELS / "fire_rabah.pt")), YOLO(str(MODELS / "fire_n26.pt"))]
-        self.pose = YOLO(str(Path(__file__).parent / "yolo11m-pose.pt"))
-        self.fall_clf = joblib.load(MODELS / "fall_clf.joblib")
+        self.fire_models = [YOLO(str(m), task="detect") for m in FIRE_MODELS]
+        self.pose = YOLO(str(POSE_MODEL), task="pose")
+        self.fall_clf = joblib.load(MODELS / FALL_CLF)
         self._cpu = ThreadPoolExecutor(max_workers=1)
         from hsemotion_onnx.facial_emotions import HSEmotionRecognizer
         self.emo = HSEmotionRecognizer(model_name="enet_b0_8_best_vgaf")
@@ -85,8 +105,8 @@ class Pipeline:
         # warm up so first live frame isn't slow
         z = np.zeros((480, 640, 3), np.uint8)
         for m in self.fire_models:
-            m.predict(z, device=DEVICE, verbose=False)
-        self.pose.predict(z, device=DEVICE, verbose=False)
+            m.predict(z, verbose=False, **PREDICT)
+        self.pose.predict(z, verbose=False, **PREDICT)
 
     # ---------------------------------------------------------------- fire
     def detect_fire(self, img: np.ndarray) -> dict:
@@ -95,7 +115,7 @@ class Pipeline:
         h, w = img.shape[:2]
         per_model = []  # [(best_flame, best_smoke, boxes)]
         for m in self.fire_models:
-            r = m.predict(img, device=DEVICE, imgsz=640, conf=0.05, half=HALF, verbose=False)[0]
+            r = m.predict(img, imgsz=640, conf=0.05, verbose=False, **PREDICT)[0]
             best = {"flame_visible": 0.0, "smoke_visible": 0.0}
             boxes = []
             for xyxy, c, k in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist(), r.boxes.cls.tolist()):
@@ -128,8 +148,9 @@ class Pipeline:
         }
 
     # ---------------------------------------------------------------- fall
-    def detect_fall(self, img: np.ndarray, state: TrackState | None, conf: float = 0.25) -> list[dict]:
-        r = self.pose.predict(img, device=DEVICE, imgsz=POSE_IMGSZ, conf=conf, half=HALF, verbose=False)[0]
+    def detect_fall(self, img: np.ndarray, state: TrackState | None, conf: float = 0.35) -> list[dict]:
+        # conf/iou: at 0.25/0.7 a lone person often also yields a low-score ghost or overlapping duplicate box
+        r = self.pose.predict(img, imgsz=POSE_IMGSZ, conf=conf, iou=0.5, verbose=False, **PREDICT)[0]
         h, w = img.shape[:2]
         now = time.time()
         people = []
@@ -235,7 +256,7 @@ class Pipeline:
                 fire: bool = True, fall: bool = True, emotion: bool = True) -> dict:
         t0 = time.perf_counter()
         res: dict = {"w": img.shape[1], "h": img.shape[0]}
-        # emotion runs on CPU (onnxruntime) while fire + fall use the GPU (MPS)
+        # emotion runs on CPU (onnxruntime) while fire + fall use the GPU (MPS); on the Pi all share the CPU
         faces = self._cpu.submit(self.detect_emotion, img, state) if emotion else None
         if fire:
             if state is None or state.fire is None or state.frame % FIRE_EVERY == 0:

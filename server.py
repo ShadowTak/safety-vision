@@ -10,13 +10,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from notify import StreamAlerts, Telegram
-from pipeline import DEVICE, Pipeline, TrackState
+from pipeline import DEVICE, PROFILE, Pipeline, TrackState
 
 ROOT = Path(__file__).parent
 app = FastAPI(title="Safety Vision")
 pipe: Pipeline | None = None
 tg = Telegram()
-# single worker: MPS models are not safe to run concurrently and frames must stay ordered
+# single worker: MPS models are not safe (and on the Pi NCNN already uses all cores) to run concurrently and frames must stay ordered
 pool = ThreadPoolExecutor(max_workers=1)
 
 
@@ -24,7 +24,7 @@ pool = ThreadPoolExecutor(max_workers=1)
 def load() -> None:
     global pipe
     pipe = Pipeline()
-    print(f"models loaded on {DEVICE}")
+    print(f"models loaded: profile={PROFILE} device={DEVICE}")
     print("telegram alerts:", "on" if tg.token else "off (set TELEGRAM_TOKEN in .env)")
 
 

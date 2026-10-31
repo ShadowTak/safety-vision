@@ -1,7 +1,9 @@
 """Train the pose-based fall classifier and evaluate it on the held-out DeZan val set.
 
-Usage: .venv/bin/python tools/train_fall.py
-Writes models/fall_clf.joblib
+Usage: .venv/bin/python tools/train_fall.py [pose_weights.pt] [out.joblib]
+Defaults to the Mac profile (yolo11m-pose.pt -> models/fall_clf.joblib). The classifier must be
+trained on keypoints from the same pose model it runs with, e.g. for the Pi 5 profile:
+  tools/train_fall.py yolo11s-pose.pt models/fall_clf_pi.joblib
 """
 import glob
 import os
@@ -10,6 +12,7 @@ import sys
 import cv2
 import joblib
 import numpy as np
+import torch
 from sklearn.ensemble import HistGradientBoostingClassifier
 from ultralytics import YOLO
 
@@ -18,14 +21,16 @@ sys.path.insert(0, ROOT)
 from fall_features import features  # noqa: E402
 
 T = f"{ROOT}/testsets"
-pose = YOLO(f"{ROOT}/yolo11m-pose.pt")
+POSE_W = sys.argv[1] if len(sys.argv) > 1 else f"{ROOT}/yolo11m-pose.pt"
+OUT = sys.argv[2] if len(sys.argv) > 2 else f"{ROOT}/models/fall_clf.joblib"
+pose = YOLO(POSE_W)
 
 
 def people(path):
     img = cv2.imread(path)
     if img is None:
         return [], None
-    r = pose.predict(img, device="mps", imgsz=640, conf=0.25, verbose=False)[0]
+    r = pose.predict(img, device="mps" if torch.backends.mps.is_available() else "cpu", imgsz=640, conf=0.25, verbose=False)[0]
     out = []
     if r.keypoints is not None:
         for b, kp in zip(r.boxes.xyxy.cpu().numpy(), r.keypoints.data.cpu().numpy()):
@@ -113,7 +118,7 @@ print("coco negatives", n)
 Xtr, ytr = np.array(Xtr), np.array(ytr)
 clf = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, max_leaf_nodes=15,
                                      l2_regularization=1.0, class_weight="balanced", random_state=0).fit(Xtr, ytr)
-joblib.dump(clf, f"{ROOT}/models/fall_clf.joblib")
+joblib.dump(clf, OUT)
 print("trained on", len(ytr), "people,", ytr.sum(), "fallen")
 
 # ---- held-out evaluation (image level, DeZan val) ----

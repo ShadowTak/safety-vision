@@ -101,6 +101,26 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 
 ไฟล์ `.env` และ `.telegram_chat_id` อยู่ใน `.gitignore` แล้ว อย่าใส่ token ลงในโค้ดหรืออัพโหลดขึ้น GitHub
 
+## เวอร์ชัน Raspberry Pi 5 (RAM 8GB)
+
+โค้ดชุดเดียวกัน ระบบเลือกโปรไฟล์ให้เองเมื่อรันบน Linux aarch64 (บังคับด้วย `SV_PROFILE=pi` หรือ `mac`) ฟังก์ชันครบเหมือนเดิม: ไฟ/ควัน, คนล้ม, อารมณ์, Live, Demo, Telegram
+
+| ส่วน | Mac | Pi 5 |
+|---|---|---|
+| รันโมเดล | PyTorch + GPU (MPS) | **NCNN** บน CPU 4 คอร์ (เร็วกว่า PyTorch บน ARM มาก) |
+| ท่าทางคน | YOLO11**m**-pose @800 | YOLO11**s**-pose @640 (`models/yolo11s-pose_ncnn_model`) |
+| ตัวจำแนกล้ม | `fall_clf.joblib` | `fall_clf_pi.joblib` (เทรนใหม่จาก keypoint ของ s-pose) |
+| ไฟ/ควัน | 2 โมเดลเฉลี่ยกัน ทุก 2 เฟรม | โมเดลเดิม 2 ตัวแปลงเป็น NCNN รันทุก 3 เฟรม |
+
+ความแม่น (วัดบน Mac ด้วย `SV_PROFILE=pi tools/evaluate.py` ชุดทดสอบเดียวกับด้านบน): ไฟ 0.98 / ควัน 0.93 เท่าเดิม, คนล้ม DeZan accuracy 0.88 (m = 0.92), เตือนล้มผิด 0 รูป
+
+ติดตั้ง: Raspberry Pi OS 64-bit, ลง `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`) แล้ว `./run.sh` ตามขั้นตอนด้านบน
+
+- **กล้อง**: เบราว์เซอร์เปิดกล้องได้เฉพาะ `localhost` หรือ HTTPS ให้เปิดเบราว์เซอร์บนตัว Pi เอง ถ้าเปิดจากเครื่องอื่น (`HOST=0.0.0.0 ./run.sh`) โหมด Demo อัพโหลดรูปใช้ได้ แต่ Live ต้องมี HTTPS
+- แนะนำฮีตซิงก์/พัดลม (Active Cooler) เพราะ CPU เต็มโหลดต่อเนื่อง
+- ความเร็วจริงบน Pi ยังไม่ได้วัดบนเครื่องจริง (วัดความแม่นบน Mac เท่านั้น) ถ้าช้าเกินไปให้ปิดโมดูลที่ไม่ใช้ในหน้า Live
+- เทรนตัวจำแนกใหม่: `tools/train_fall.py yolo11s-pose.pt models/fall_clf_pi.joblib` ส่วนการแปลงโมเดลเป็น NCNN ใช้ `YOLO(...).export(format="ncnn", imgsz=640)`
+
 ## วิธีใช้
 
 ### โหมด Live
@@ -140,7 +160,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 
 ## ข้อจำกัด
 
-- ออกแบบมาสำหรับ Mac (MPS) ถ้าไม่มี MPS ระบบจะใช้ CPU อัตโนมัติ ซึ่งช้ากว่ามาก
+- โปรไฟล์ Mac ออกแบบมาสำหรับ MPS ถ้าไม่มี MPS จะใช้ CPU ซึ่งช้ากว่ามาก (บนเครื่อง ARM Linux เช่น Pi ใช้โปรไฟล์ Pi)
 - ชุดทดสอบยังเล็ก ตัวเลขความแม่นควรใช้เป็นแนวทาง ไม่ใช่การรับประกัน
 - ระบบนี้เป็นตัวช่วยเตือนเบื้องต้น ไม่ควรใช้แทนระบบความปลอดภัยที่ได้มาตรฐาน
 
