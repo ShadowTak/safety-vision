@@ -14,4 +14,6 @@ incoming/
 incoming2/
 samples_removed/
 testsets/
-captures/
+captures/*
+!captures/.gitkeep
+docs/poster/
