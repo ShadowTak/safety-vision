@@ -83,7 +83,7 @@ else:
 
 @app.get("/")
 def index():
-    return FileResponse(ROOT / "static" / "index.html")
+    return FileResponse(ROOT / "static" / "index.html", headers={"Cache-Control": "no-cache"})  # always revalidate after updates
 
 
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
