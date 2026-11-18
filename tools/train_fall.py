@@ -23,6 +23,7 @@ from fall_features import features  # noqa: E402
 T = f"{ROOT}/testsets"
 POSE_W = sys.argv[1] if len(sys.argv) > 1 else f"{ROOT}/yolo11m-pose.pt"
 OUT = sys.argv[2] if len(sys.argv) > 2 else f"{ROOT}/models/fall_clf.joblib"
+DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 pose = YOLO(POSE_W)
 
 
@@ -30,7 +31,7 @@ def people(path):
     img = cv2.imread(path)
     if img is None:
         return [], None
-    r = pose.predict(img, device="mps" if torch.backends.mps.is_available() else "cpu", imgsz=640, conf=0.25, verbose=False)[0]
+    r = pose.predict(img, device=DEVICE, imgsz=640, conf=0.25, verbose=False)[0]
     out = []
     if r.keypoints is not None:
         for b, kp in zip(r.boxes.xyxy.cpu().numpy(), r.keypoints.data.cpu().numpy()):
@@ -90,7 +91,7 @@ def from_folder(img_glob, label):
 
 
 def lab_for(f):
-    return os.path.splitext(f.replace("/images/", "/labels/"))[0] + ".txt"
+    return f"{T}/falldz/labels/{os.path.splitext(os.path.basename(f))[0]}.txt"
 
 
 Xtr, ytr = [], []

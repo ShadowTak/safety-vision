@@ -1,7 +1,7 @@
 """Image-level benchmark of fire/smoke detectors on D-Fire sample + hard negatives."""
-import glob, os, sys, cv2, numpy as np
+import glob, os, sys, cv2, numpy as np, torch
 from ultralytics import YOLO
-dev="mps"
+dev="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 data=[]
 for f in sorted(glob.glob("testsets/dfire/*.jpg")):
     lab=f[:-4]+".txt"; cls={l.split()[0] for l in open(lab) if l.strip()} if os.path.exists(lab) else set()

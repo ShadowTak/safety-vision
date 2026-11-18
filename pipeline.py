@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import os
-import platform
-import sys
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -23,25 +21,28 @@ MODELS = ROOT / "models"
 FIRE_ALARM = 0.4  # ensemble score threshold (D-Fire sample: fire P=0.98 R=0.93)
 FALL_ALARM = 0.5
 
-# Two deployment profiles. "mac": PyTorch on the Apple GPU. "pi": Raspberry Pi 5 (8GB), CPU only,
-# so every YOLO runs as NCNN (ARM-optimised, all 4 cores) and a smaller pose model is used.
-# Auto-detected; force with SV_PROFILE=mac|pi.
-PROFILE = os.environ.get("SV_PROFILE") or (
-    "pi" if sys.platform == "linux" and platform.machine() in ("aarch64", "arm64") else "mac")
-if PROFILE == "pi":
-    DEVICE, HALF = "cpu", False
+# Two profiles, picked by hardware, not OS. "full": PyTorch on a GPU (Apple MPS or NVIDIA CUDA).
+# "lite": CPU only (Raspberry Pi 5, or any PC without a GPU), so every YOLO runs as NCNN (all
+# cores) and a smaller pose model is used. Force with SV_PROFILE=full|lite (mac|pi still work).
+DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+_forced = os.environ.get("SV_PROFILE", "")
+PROFILE = {"mac": "full", "pi": "lite"}.get(_forced, _forced) or ("lite" if DEVICE == "cpu" else "full")
+if PROFILE == "lite":
+    DEVICE = "cpu"
     POSE_MODEL, FALL_CLF = MODELS / "yolo11s-pose_ncnn_model", "fall_clf_pi.joblib"
     FIRE_MODELS = [MODELS / "fire_rabah_ncnn_model", MODELS / "fire_n26_ncnn_model"]
     POSE_IMGSZ = 640  # fixed by the NCNN export
-    FIRE_EVERY = 3  # fire changes slowly: run it every 3rd frame and reuse the result
+    FIRE_EVERY = 3  # fire changes slowly: run it every 3rd live frame and reuse the result
+    EMO_EVERY = 3  # emotion shares the CPU with the detectors here, so it is thinned out too
 else:
-    DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
-    HALF = DEVICE == "mps"  # fp16 on Apple GPU: ~35% faster pose, same accuracy (tools/evaluate.py)
     POSE_MODEL, FALL_CLF = ROOT / "yolo11m-pose.pt", "fall_clf.joblib"
     FIRE_MODELS = [MODELS / "fire_rabah.pt", MODELS / "fire_n26.pt"]
     POSE_IMGSZ = 800  # better on small/distant people than 640 (DeZan val acc 0.90 -> 0.92)
     FIRE_EVERY = 2
-PREDICT = {"device": DEVICE, **({"half": True} if HALF else {})}  # kwargs shared by every YOLO call
+    EMO_EVERY = 1  # runs on idle CPU cores in parallel with the GPU models
+# kwargs shared by every YOLO call. fp16 on a GPU: ~35% faster pose, same accuracy (tools/evaluate.py)
+PREDICT = {"device": DEVICE, **({"quantize": 16} if DEVICE != "cpu" else {})}
+FACE_MAX = 640  # longest side fed to the face detector: ~10 ms/frame faster than 1280, sample emotion accuracy not lower
 
 # COCO keypoint indices
 L_SH, R_SH, L_HIP, R_HIP = 5, 6, 11, 12
@@ -90,6 +91,7 @@ class TrackState:
     faces: _Tracker = field(default_factory=lambda: _Tracker(ttl=1.0))
     frame: int = 0
     fire: dict | None = None  # last fire result, reused between fire runs
+    emo: list | None = None  # last emotion result, reused between emotion runs
 
 
 class Pipeline:
@@ -204,8 +206,8 @@ class Pipeline:
     def detect_emotion(self, img: np.ndarray, state: TrackState | None = None) -> list[dict]:
         h, w = img.shape[:2]
         scale = 1.0
-        if max(h, w) > 1280:
-            scale = 1280 / max(h, w)
+        if max(h, w) > FACE_MAX:
+            scale = FACE_MAX / max(h, w)
             img_s = cv2.resize(img, None, fx=scale, fy=scale)
         else:
             img_s = img
@@ -256,8 +258,15 @@ class Pipeline:
                 fire: bool = True, fall: bool = True, emotion: bool = True) -> dict:
         t0 = time.perf_counter()
         res: dict = {"w": img.shape[1], "h": img.shape[0]}
-        # emotion runs on CPU (onnxruntime) while fire + fall use the GPU (MPS); on the Pi all share the CPU
-        faces = self._cpu.submit(self.detect_emotion, img, state) if emotion else None
+        # emotion runs on CPU (onnxruntime) while fire + fall use the GPU; on the lite profile all share the CPU
+        faces = None
+        if not emotion:
+            if state is not None:
+                state.emo = None  # never reuse a result from before emotion was switched off
+        elif state is None or state.emo is None or state.frame % EMO_EVERY == 0:
+            faces = self._cpu.submit(self.detect_emotion, img, state)
+        else:
+            res["faces"] = state.emo
         if fire:
             if state is None or state.fire is None or state.frame % FIRE_EVERY == 0:
                 res["fire"] = self.detect_fire(img)
@@ -273,5 +282,7 @@ class Pipeline:
             res["people"] = self.detect_fall(img, state)
         if faces:
             res["faces"] = faces.result()
+            if state is not None:
+                state.emo = res["faces"]
         res["ms"] = round((time.perf_counter() - t0) * 1000, 1)
         return res

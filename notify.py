@@ -16,8 +16,9 @@ import requests
 API = "https://api.telegram.org/bot{token}/{method}"
 CHAT_FILE = Path(__file__).parent / ".telegram_chat_id"
 FALL_NOTIFY = 0.8   # fall_score needed to notify (the on-screen alarm is lower, 0.5)
-CONFIRM_FRAMES = 2  # consecutive live detections before notifying
+CONFIRM_S = 0.5     # a detection must persist this long before notifying (same on a fast Mac and a slow Pi)
 COOLDOWN_S = 60     # at most one message per kind per minute
+RETRY_S = 10        # wait after a failed send before trying again
 
 
 class Telegram:
@@ -36,7 +37,7 @@ class Telegram:
             if not self.token or now - self._last.get(kind, 0) < COOLDOWN_S:
                 return
             self._last[kind] = now
-        self._pool.submit(self._send, caption, img, res)
+        self._pool.submit(self._send, kind, caption, img, res)
 
     def _chat(self) -> str | None:
         if self.chat_id:
@@ -49,20 +50,21 @@ class Telegram:
         CHAT_FILE.write_text(self.chat_id)
         return self.chat_id
 
-    def _send(self, caption: str, img: np.ndarray, res: dict) -> None:
+    def _send(self, kind: str, caption: str, img: np.ndarray, res: dict) -> None:
         try:
             chat = self._chat()
             if chat is None:
-                print("telegram: no chat yet, send /start to the bot first")
-                return
+                raise RuntimeError("no chat yet, send /start to the bot first")
             jpeg = cv2.imencode(".jpg", annotate(img, res), [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()
             r = requests.post(API.format(token=self.token, method="sendPhoto"),
                               data={"chat_id": chat, "caption": caption},
                               files={"photo": ("alert.jpg", jpeg, "image/jpeg")}, timeout=20)
             if not r.ok:
-                print("telegram:", r.status_code, r.text[:200])
-        except requests.RequestException as e:
+                raise RuntimeError(f"{r.status_code} {r.text[:200]}")
+        except (requests.RequestException, RuntimeError) as e:
             print("telegram:", e)
+            with self._lock:
+                self._last[kind] = time.time() - COOLDOWN_S + RETRY_S  # not delivered: retry soon
 
 
 def annotate(img: np.ndarray, res: dict) -> np.ndarray:
@@ -83,22 +85,23 @@ def annotate(img: np.ndarray, res: dict) -> np.ndarray:
 
 
 class StreamAlerts:
-    """Per-connection confirmation: notify only after CONFIRM_FRAMES consecutive detections."""
+    """Per-connection confirmation: notify only once a detection has persisted for CONFIRM_S."""
 
     def __init__(self, tg: Telegram) -> None:
         self.tg = tg
-        self.fire_hits = self.fall_hits = 0
+        self.fire_since = self.fall_since = None  # time of the first detection in the current run
 
     def check(self, img: np.ndarray, res: dict) -> None:
+        now = time.monotonic()
         fire = res.get("fire")
-        if fire is None:
-            self.fire_hits = 0
-        elif not fire.get("reused"):  # a reused result is not a new confirmation
-            self.fire_hits = self.fire_hits + 1 if fire["fire_alarm"] else 0
+        if not (fire and fire["fire_alarm"]):
+            self.fire_since = None
+        elif self.fire_since is None and not fire.get("reused"):  # a run starts on a fresh result
+            self.fire_since = now
         fallen = [p["fall_score"] for p in res.get("people", []) if p["fall_score"] >= FALL_NOTIFY]
-        self.fall_hits = self.fall_hits + 1 if fallen else 0
+        self.fall_since = (self.fall_since or now) if fallen else None
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        if self.fire_hits >= CONFIRM_FRAMES:
+        if self.fire_since is not None and now - self.fire_since >= CONFIRM_S and not fire.get("reused"):
             self.tg.send("fire", f"🔥 ตรวจพบไฟไหม้ {fire['flame_conf']:.0%}\n{stamp}", img, res)
-        if self.fall_hits >= CONFIRM_FRAMES:
+        if fallen and now - self.fall_since >= CONFIRM_S:
             self.tg.send("fall", f"🚨 ตรวจพบคนล้ม {max(fallen):.0%}\n{stamp}", img, res)

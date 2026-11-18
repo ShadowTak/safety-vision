@@ -39,7 +39,7 @@ print(f"FIRE/SMOKE false alarms on {len(neg)} hard negatives (sunsets, orange li
 # ---- fall: DeZan val (held out from training; label 0 = fallen)
 rows = []
 for f in sorted(glob.glob(f"{T}/falldz/images/*")):
-    lab = os.path.splitext(f.replace("/images/", "/labels/"))[0] + ".txt"
+    lab = f"{T}/falldz/labels/{os.path.splitext(os.path.basename(f))[0]}.txt"
     gt = any(l.split()[0] == "0" for l in open(lab) if l.strip())
     rows.append((gt, any(x["fallen"] for x in p.detect_fall(cv2.imread(f), None))))
 print("FALL  (DeZan val)", prf(rows))

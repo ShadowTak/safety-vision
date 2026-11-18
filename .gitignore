@@ -4,6 +4,7 @@
 
 # environment and caches
 .venv/
+.DS_Store
 __pycache__/
 *.pyc
 
@@ -13,3 +14,4 @@ incoming/
 incoming2/
 samples_removed/
 testsets/
+captures/
