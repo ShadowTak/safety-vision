@@ -71,6 +71,15 @@ def samples():
 
 app.mount("/samples", StaticFiles(directory=ROOT / "samples"), name="samples")
 
+# Optional machine-local add-ons (local_addons.py, not tracked). Installed before "/" so they may serve the page.
+try:
+    import local_addons
+except ModuleNotFoundError as e:
+    if e.name != "local_addons":
+        raise
+else:
+    local_addons.install(app)
+
 
 @app.get("/")
 def index():
